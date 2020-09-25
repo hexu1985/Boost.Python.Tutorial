@@ -11,11 +11,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # we default to Release build type
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
 # for testing we will need the python interpreter
-find_package(PythonInterp REQUIRED)
+find_package(PythonInterp 3)
 
 # we require python development headers
 find_package(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR} EXACT REQUIRED)
@@ -25,65 +25,82 @@ find_package(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR} EXACT RE
 # python2, python27, python3, python36, python37, ...
 
 list(
-  APPEND _components
+    APPEND _components
     python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}
     python${PYTHON_VERSION_MAJOR}
     python
-  )
+    )
 
 set(_boost_component_found "")
 
 foreach(_component IN ITEMS ${_components})
-  find_package(Boost COMPONENTS ${_component})
-  if(Boost_FOUND)
-    set(_boost_component_found ${_component})
-    break()
-  endif()
+    find_package(Boost COMPONENTS ${_component})
+    if(Boost_FOUND)
+        set(_boost_component_found ${_component})
+        break()
+    endif()
 endforeach()
 
 if(_boost_component_found STREQUAL "")
-  message(FATAL_ERROR "No matching Boost.Python component found")
+    message(FATAL_ERROR "No matching Boost.Python component found")
 endif()
+
+add_custom_command(
+    OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/test_world.py
+    COMMAND
+    ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/test_world.py 
+        ${CMAKE_CURRENT_BINARY_DIR}/test_world.py
+    DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_world.py
+    )
 
 # create python module
 add_library(hello
-  MODULE
+    MODULE
     world.cpp
-  )
+    )
+
+target_sources(hello PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/test_world.py)
 
 target_link_libraries(hello
-  PUBLIC
+    PUBLIC
     Boost::${_boost_component_found}
     ${PYTHON_LIBRARIES}
-  )
+    )
 
 target_include_directories(hello
-  PRIVATE
+    PRIVATE
     ${PYTHON_INCLUDE_DIRS}
-  )
+    )
 
 # prevent cmake from creating a "lib" prefix
 set_target_properties(hello
-  PROPERTIES
+    PROPERTIES
     PREFIX ""
-  )
+    )
 
 if(WIN32)
-  # python will not import dll but expects pyd
-  set_target_properties(hello
-    PROPERTIES
-      SUFFIX ".pyd"
-    )
+    # python will not import dll but expects pyd
+    set_target_properties(hello
+        PROPERTIES
+        SUFFIX ".pyd"
+        )
 endif()
 
-# turn on testing
-enable_testing()
+option(ENABLE_UNIT_TESTS "Enable unit tests" ON)
+message(STATUS "Enable testing: ${ENABLE_UNIT_TESTS}")
 
-# define test
-add_test(
-  NAME
-    python_test
-  COMMAND
-    ${CMAKE_COMMAND} -E env HELLO_MODULE_PATH=$<TARGET_FILE_DIR:hello>
-    ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_world.py
-  )
+if (ENABLE_UNIT_TESTS)
+    # turn on testing
+    enable_testing()
+
+    # define test
+    add_test(
+        NAME
+        python_test
+        COMMAND
+        ${CMAKE_COMMAND} -E env HELLO_MODULE_PATH=$<TARGET_FILE_DIR:hello>
+        ${PYTHON_EXECUTABLE} test_world.py
+        )
+endif()
